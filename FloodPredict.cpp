@@ -324,9 +324,9 @@ void evaluate_cross_file(const string &filename) {
          << "| " << setw(20) << "% of Samples"
          << "| " << "Interpretation" << endl;
 
-    cout << string(26, '-') << "|"
-         << string(21, '-') << "|"
-         << string(22, '-') << "|"
+    cout << string(26, '-')
+         << string(21, '-')
+         << string(22, '-')
          << string(70, '-') << endl;
 
     cout << setw(26) << "Correct within margin"
@@ -344,9 +344,9 @@ void evaluate_cross_file(const string &filename) {
          << "| " << setw(20) << fixed << setprecision(2) << pc_over
          << "| " << "The value is higher than actual class." << endl;
 
-    cout << string(26, '-') << "|"
-         << string(21, '-') << "|"
-         << string(22, '-') << "|"
+    cout << string(26, '-')
+         << string(21, '-')
+         << string(22, '-')
          << string(70, '-') << endl;
 
     cout << setw(26) << "Total Test Samples"
