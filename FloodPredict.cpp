@@ -1,4 +1,4 @@
-// โปรแกรมนี้สร้างและฝึกสอนโครงข่ายประสาทเทียมแบบง่ายสำหรับทำนายค่าระดับน้ำท่วม
+// โปรแกรมนี้สร้างและฝึกสอนโครงข่ายประสาทเทียมแบบง่ายสำหรับทำนายค่าระดับน้ำท่วม //
 // พร้อมทำ cross-validation เพื่อตรวจสอบความแม่นยำ
 
 #include <iostream>      // สำหรับแสดงผลลัพธ์ทางหน้าจอ
@@ -275,6 +275,85 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
          << setw(20) << "100%" << "|" << endl;
 }
 
+void evaluate_cross_file(const string &filename) {
+    ifstream file(filename);
+    if (!file.is_open()) {
+        cerr << "Error: Could not open " << filename << endl;
+        return;
+    }
+
+    int correct = 0, under = 0, over = 0;
+    int total = 0;
+    string line;
+
+    while (getline(file, line)) { // p0, p1, ...
+        // predicted
+        getline(file, line);
+        stringstream ss_pred(line);
+        double pred0, pred1;
+        ss_pred >> pred0 >> pred1;
+
+        // actual
+        getline(file, line);
+        stringstream ss_act(line);
+        int act0, act1;
+        ss_act >> act0 >> act1;
+
+        int pred_class = (pred0 > pred1) ? 0 : 1;
+        int actual_class = (act0 == 1) ? 0 : 1;
+
+        if (pred_class == actual_class)
+            correct++;
+        else if (pred_class < actual_class)
+            under++;
+        else
+            over++;
+
+        total++;
+    }
+
+    double pc_correct = (double(correct) / total) * 100.0;
+    double pc_under = (double(under) / total) * 100.0;
+    double pc_over = (double(over) / total) * 100.0;
+
+    // สร้างตารางให้ตรงทุกช่อง
+    cout << "\n                              --- Confusion Matrix (from cross.txt) ---\n";
+    cout << left
+         << setw(26) << "Category"
+         << "| " << setw(19) << "Count"
+         << "| " << setw(20) << "% of Samples"
+         << "| " << "Interpretation" << endl;
+
+    cout << string(26, '-') << "|"
+         << string(21, '-') << "|"
+         << string(22, '-') << "|"
+         << string(70, '-') << endl;
+
+    cout << setw(26) << "Correct within margin"
+         << "| " << setw(19) << correct
+         << "| " << setw(20) << fixed << setprecision(2) << pc_correct
+         << "| " << "The value is within acceptable limits." << endl;
+
+    cout << setw(26) << "Under predictions"
+         << "| " << setw(19) << under
+         << "| " << setw(20) << fixed << setprecision(2) << pc_under
+         << "| " << "The value is lower than actual class." << endl;
+
+    cout << setw(26) << "Over predictions"
+         << "| " << setw(19) << over
+         << "| " << setw(20) << fixed << setprecision(2) << pc_over
+         << "| " << "The value is higher than actual class." << endl;
+
+    cout << string(26, '-') << "|"
+         << string(21, '-') << "|"
+         << string(22, '-') << "|"
+         << string(70, '-') << endl;
+
+    cout << setw(26) << "Total Test Samples"
+         << "| " << setw(19) << total
+         << "| " << setw(20) << "100.00"
+         << "| " << endl;
+}
 
 int main() {
     double min_val, max_val;
@@ -302,5 +381,8 @@ int main() {
     cout << "\n--- Cross-Validation ---\n";
     cout << "\n";
     cross_validate(data, min_val, max_val);
+
+    evaluate_cross_file("cross.txt");
+    return 0;
 
 }
