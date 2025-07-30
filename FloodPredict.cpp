@@ -254,19 +254,19 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
          << setw(26) << " Correct within margin" << "|"
          << setw(20) << total_correct_within_margin << "|"
          << setw(19) << fixed << setprecision(4) << pc_ttin << "%" << "|"
-         << "  The model's predictions were very close to the actual values.\n";
+         << "  The value is within acceptable limits.\n";
 
     cout << left
          << setw(26) << " Under predictions" << "|"
          << setw(20) << total_under_prediction << "|"
          << setw(19) << fixed << setprecision(4) << pc_ttun << "%" << "|"
-         << "  The model consistently predicted lower than actual values.\n";
+         << "  The value is lower than actual value.\n";
 
     cout << left
          << setw(26) << " Over predictions" << "|"
          << setw(20) << total_over_prediction << "|"
          << setw(19) << fixed << setprecision(4) << pc_ttov << "%" << "|"
-         << "  The model consistently predicted higher than actual values.\n";
+         << "  The value is higher than actual value.\n";
 
     cout << string(90, '-') << "\n";
     cout << left
