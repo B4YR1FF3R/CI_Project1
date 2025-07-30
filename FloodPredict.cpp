@@ -9,6 +9,7 @@
 #include <fstream>       // สำหรับอ่านไฟล์ข้อมูล
 #include <sstream>       // แยกสตริงออกเป็นตัวเลข
 #include <numeric>       // ใช้สำหรับ accumulate (ถ้ามี)
+#include <iomanip>       // จัดตกแต่งตาราง
 
 using namespace std;
 
@@ -188,6 +189,10 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
 
     int fold_size = dataset.size() / folds;
     double total_accuracy = 0.0;
+    int total_correct_within_margin = 0;
+    int total_under_prediction = 0;
+    int total_over_prediction = 0;
+    int total_test_samples = 0;
 
     for (int f = 0; f < folds; ++f) {
         vector<DataPoint> train_set, test_set;
@@ -219,13 +224,57 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
         double accuracy = total > 0 ? double(correct) / total : 0.0;
         total_accuracy += accuracy;
 
+        total_correct_within_margin += correct;
+        total_under_prediction += under;
+        total_over_prediction += over;
+        total_test_samples += total;
+
         cout << "--- Fold " << f + 1 << "/" << folds << " ---\n";
         cout << "Accuracy: " << accuracy << " (" << correct << "/" << total << " within margin)\n";
         cout << "Under: " << under << ", Over: " << over << endl;
+        cout << "\n";
     }
 
-    cout << "\nAverage Accuracy across folds: " << total_accuracy / folds << endl;
+    cout << "!!! Average Accuracy across folds: " << total_accuracy / folds << " !!!" << endl;
+
+    // พิมพ์ Confusion Matrix แบบจัดตำแหน่งตรง
+    double pc_ttin = (double(total_correct_within_margin) / total_test_samples) * 100.0;
+    double pc_ttun = (double(total_under_prediction) / total_test_samples) * 100.0;
+    double pc_ttov = (double(total_over_prediction) / total_test_samples) * 100.0;
+
+    cout << "\n                                  --- Confusion Matrix ---\n";
+    cout << left
+         << setw(26) << " " << "|"
+         << setw(20) << "  Count" << "|"
+         << setw(20) << "  % of all Samples" << "|"
+         << "  Interpretation\n";
+    cout << string(90, '-') << "\n";
+
+    cout << left
+         << setw(26) << " Correct within margin" << "|"
+         << setw(20) << total_correct_within_margin << "|"
+         << setw(19) << fixed << setprecision(4) << pc_ttin << "%" << "|"
+         << "  The model's predictions were very close to the actual values.\n";
+
+    cout << left
+         << setw(26) << " Under predictions" << "|"
+         << setw(20) << total_under_prediction << "|"
+         << setw(19) << fixed << setprecision(4) << pc_ttun << "%" << "|"
+         << "  The model consistently predicted lower than actual values.\n";
+
+    cout << left
+         << setw(26) << " Over predictions" << "|"
+         << setw(20) << total_over_prediction << "|"
+         << setw(19) << fixed << setprecision(4) << pc_ttov << "%" << "|"
+         << "  The model consistently predicted higher than actual values.\n";
+
+    cout << string(90, '-') << "\n";
+    cout << left
+         << setw(26) << " Total Test Samples" << "|"
+         << setw(20) << total_test_samples << "|"
+         << setw(20) << "100%" << "|" << endl;
 }
+
 
 int main() {
     double min_val, max_val;
@@ -251,5 +300,7 @@ int main() {
 
     // ทำ 10-fold cross-validation
     cout << "\n--- Cross-Validation ---\n";
+    cout << "\n";
     cross_validate(data, min_val, max_val);
+
 }
