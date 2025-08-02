@@ -1,229 +1,199 @@
+// โปรแกรมนี้สร้างและฝึกสอนโครงข่ายประสาทเทียมแบบ 2 ชั้นซ่อน สำหรับทำนายค่าระดับน้ำท่วม
+// พร้อมปรับจำนวนโหนด hidden layer, learning rate, momentum ได้
+
 #include <iostream>
-#include <fstream>
 #include <vector>
-#include <string>
-#include <sstream>
 #include <cmath>
-#include <random>
 #include <algorithm>
-#include <limits>
+#include <random>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
 
 using namespace std;
 
-double normalize(double value, double min_val, double max_val) {
-    if (max_val == min_val) return 0.5;
-    return (value - min_val) / (max_val - min_val);
+const int INPUT_SIZE = 8;
+const int OUTPUT_SIZE = 1;
+const int EPOCHS = 300;
+const double TARGET_MARGIN = 10.0;
+
+// Activation functions
+inline double tanh_act(double x) { return tanh(x); }
+inline double tanh_derivative(double x) { return 1.0 - x * x; }
+
+// Normalize / Denormalize
+inline double normalize(double x, double min_val, double max_val) {
+    return (max_val - min_val == 0) ? 0.0 : (x - min_val) / (max_val - min_val);
 }
 
-double denormalize(double value, double min_val, double max_val) {
-    return value * (max_val - min_val) + min_val;
+inline double denormalize(double x, double min_val, double max_val) {
+    return x * (max_val - min_val) + min_val;
 }
 
-double sigmoid(double x) {
-    return 1.0 / (1.0 + exp(-x));
-}
-
-double sigmoid_derivative(double x) {
-    double s = sigmoid(x);
-    return s * (1.0 - s);
-}
-
-double dot_product(const vector<double>& vec1, const vector<double>& vec2) {
-    double result = 0.0;
-    for (size_t i = 0; i < vec1.size(); ++i) result += vec1[i] * vec2[i];
-    return result;
-}
-
-class NeuralNetwork {
-public:
-    int input_nodes, hidden1_nodes, hidden2_nodes, output_nodes;
-    double learning_rate;
-    vector<vector<double>> weights_inh1, weights_h1h2, weights_h2o;
-    vector<double> bias_h1, bias_h2, bias_o;
-    vector<double> hidden1_inputs_sum, hidden1_outputs;
-    vector<double> hidden2_inputs_sum, hidden2_outputs;
-    vector<double> final_inputs_sum, final_outputs;
-    
-    NeuralNetwork(int in, int h1, int h2, int out, double lr) {
-        input_nodes = in;
-        hidden1_nodes = h1;
-        hidden2_nodes = h2;
-        output_nodes = out;
-        learning_rate = lr;
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_real_distribution<> dis(-0.5, 0.5);
-
-        weights_inh1.resize(hidden1_nodes, vector<double>(input_nodes));
-        for (auto& row : weights_inh1) for (auto& w : row) w = dis(gen);
-        bias_h1.resize(hidden1_nodes); for (auto& b : bias_h1) b = dis(gen);
-
-        weights_h1h2.resize(hidden2_nodes, vector<double>(hidden1_nodes));
-        for (auto& row : weights_h1h2) for (auto& w : row) w = dis(gen);
-        bias_h2.resize(hidden2_nodes); for (auto& b : bias_h2) b = dis(gen);
-
-        weights_h2o.resize(output_nodes, vector<double>(hidden2_nodes));
-        for (auto& row : weights_h2o) for (auto& w : row) w = dis(gen);
-        bias_o.resize(output_nodes); for (auto& b : bias_o) b = dis(gen);
-    }
-
-    vector<double> feedforward(const vector<double>& input_list) {
-        hidden1_inputs_sum.resize(hidden1_nodes);
-        hidden1_outputs.resize(hidden1_nodes);
-        for (int i = 0; i < hidden1_nodes; ++i) {
-            hidden1_inputs_sum[i] = dot_product(input_list, weights_inh1[i]) + bias_h1[i];
-            hidden1_outputs[i] = sigmoid(hidden1_inputs_sum[i]);
-        }
-
-        hidden2_inputs_sum.resize(hidden2_nodes);
-        hidden2_outputs.resize(hidden2_nodes);
-        for (int i = 0; i < hidden2_nodes; ++i) {
-            hidden2_inputs_sum[i] = dot_product(hidden1_outputs, weights_h1h2[i]) + bias_h2[i];
-            hidden2_outputs[i] = sigmoid(hidden2_inputs_sum[i]);
-        }
-
-        final_inputs_sum.resize(output_nodes);
-        final_outputs.resize(output_nodes);
-        for (int i = 0; i < output_nodes; ++i) {
-            final_inputs_sum[i] = dot_product(hidden2_outputs, weights_h2o[i]) + bias_o[i];
-            final_outputs[i] = sigmoid(final_inputs_sum[i]);
-        }
-        return final_outputs;
-    }
-
-    void train(const vector<double>& input_list, const vector<double>& target_list) {
-        vector<double> outputs = feedforward(input_list);
-
-        vector<double> output_errors(output_nodes);
-        for (int i = 0; i < output_nodes; ++i)
-            output_errors[i] = target_list[i] - outputs[i];
-
-        vector<double> output_gradients(output_nodes);
-        for (int i = 0; i < output_nodes; ++i)
-            output_gradients[i] = output_errors[i] * sigmoid_derivative(final_inputs_sum[i]) * learning_rate;
-
-        vector<double> hidden2_errors(hidden2_nodes, 0.0);
-        for (int i = 0; i < output_nodes; ++i)
-            for (int j = 0; j < hidden2_nodes; ++j)
-                hidden2_errors[j] += (output_gradients[i] / learning_rate) * weights_h2o[i][j];
-
-        vector<double> hidden2_gradients(hidden2_nodes);
-        for (int i = 0; i < hidden2_nodes; ++i)
-            hidden2_gradients[i] = hidden2_errors[i] * sigmoid_derivative(hidden2_inputs_sum[i]) * learning_rate;
-
-        vector<double> hidden1_errors(hidden1_nodes, 0.0);
-        for (int i = 0; i < hidden2_nodes; ++i)
-            for (int j = 0; j < hidden1_nodes; ++j)
-                hidden1_errors[j] += (hidden2_gradients[i] / learning_rate) * weights_h1h2[i][j];
-
-        vector<double> hidden1_gradients(hidden1_nodes);
-        for (int i = 0; i < hidden1_nodes; ++i)
-            hidden1_gradients[i] = hidden1_errors[i] * sigmoid_derivative(hidden1_inputs_sum[i]) * learning_rate;
-
-        for (int i = 0; i < output_nodes; ++i)
-            for (int j = 0; j < hidden2_nodes; ++j)
-                weights_h2o[i][j] += output_gradients[i] * hidden2_outputs[j];
-        for (int i = 0; i < output_nodes; ++i)
-            bias_o[i] += output_gradients[i];
-
-        for (int i = 0; i < hidden2_nodes; ++i)
-            for (int j = 0; j < hidden1_nodes; ++j)
-                weights_h1h2[i][j] += hidden2_gradients[i] * hidden1_outputs[j];
-        for (int i = 0; i < hidden2_nodes; ++i)
-            bias_h2[i] += hidden2_gradients[i];
-
-        for (int i = 0; i < hidden1_nodes; ++i)
-            for (int j = 0; j < input_nodes; ++j)
-                weights_inh1[i][j] += hidden1_gradients[i] * input_list[j];
-        for (int i = 0; i < hidden1_nodes; ++i)
-            bias_h1[i] += hidden1_gradients[i];
-    }
+struct DataPoint {
+    vector<double> inputs;
+    double target;
 };
 
-struct DataRow {
-    vector<double> inputs;
-    vector<double> targets;
+vector<DataPoint> load_dataset(const string &filename, double &min_val, double &max_val) {
+    vector<DataPoint> dataset;
+    ifstream file(filename);
+    string line;
+    getline(file, line); // skip header
+
+    vector<double> all_values;
+    while (getline(file, line)) {
+        replace(line.begin(), line.end(), '\t', ' ');
+        stringstream ss(line);
+        vector<double> values;
+        double val;
+        while (ss >> val) values.push_back(val);
+        if (values.size() == INPUT_SIZE + 1) {
+            for (double v : values) all_values.push_back(v);
+            DataPoint dp;
+            dp.inputs = vector<double>(values.begin(), values.begin() + INPUT_SIZE);
+            dp.target = values.back();
+            dataset.push_back(dp);
+        }
+    }
+    min_val = *min_element(all_values.begin(), all_values.end());
+    max_val = *max_element(all_values.begin(), all_values.end());
+    return dataset;
+}
+
+struct NeuralNetwork {
+    int hidden1_size, hidden2_size;
+    double learning_rate, momentum;
+
+    vector<vector<double>> w1, w2;
+    vector<double> w3;
+
+    vector<double> a1, a2;
+    vector<double> delta1_prev, delta2_prev, delta3_prev;
+
+    mt19937 gen{random_device{}()};
+    uniform_real_distribution<> dis{-0.5, 0.5};
+
+    NeuralNetwork(int h1, int h2, double lr, double m) :
+        hidden1_size(h1), hidden2_size(h2), learning_rate(lr), momentum(m) {
+        w1.resize(hidden1_size, vector<double>(INPUT_SIZE));
+        w2.resize(hidden2_size, vector<double>(hidden1_size));
+        w3.resize(hidden2_size);
+
+        a1.resize(hidden1_size);
+        a2.resize(hidden2_size);
+
+        delta1_prev.resize(hidden1_size * INPUT_SIZE);
+        delta2_prev.resize(hidden2_size * hidden1_size);
+        delta3_prev.resize(hidden2_size);
+
+        randomize_weights();
+    }
+
+    void randomize_weights() {
+        for (auto &row : w1) for (double &w : row) w = dis(gen);
+        for (auto &row : w2) for (double &w : row) w = dis(gen);
+        for (double &w : w3) w = dis(gen);
+    }
+
+    double forward(const vector<double> &input) {
+        for (int i = 0; i < hidden1_size; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < INPUT_SIZE; ++j)
+                sum += w1[i][j] * input[j];
+            a1[i] = tanh_act(sum);
+        }
+        for (int i = 0; i < hidden2_size; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < hidden1_size; ++j)
+                sum += w2[i][j] * a1[j];
+            a2[i] = tanh_act(sum);
+        }
+        double out = 0.0;
+        for (int i = 0; i < hidden2_size; ++i)
+            out += w3[i] * a2[i];
+        return out;
+    }
+
+    void train(const vector<DataPoint> &data, double min_val, double max_val) {
+        for (int epoch = 1; epoch <= EPOCHS; ++epoch) {
+            double total_error = 0.0;
+            for (const auto &dp : data) {
+                vector<double> input(INPUT_SIZE);
+                for (int i = 0; i < INPUT_SIZE; ++i)
+                    input[i] = normalize(dp.inputs[i], min_val, max_val);
+                double target = normalize(dp.target, min_val, max_val);
+                double output = forward(input);
+                double error = target - output;
+                total_error += error * error;
+
+                // update w3
+                for (int i = 0; i < hidden2_size; ++i) {
+                    double delta = error * a2[i];
+                    w3[i] += learning_rate * delta + momentum * delta3_prev[i];
+                    delta3_prev[i] = learning_rate * delta;
+                }
+
+                // update w2
+                for (int i = 0; i < hidden2_size; ++i) {
+                    double err = error * w3[i] * tanh_derivative(a2[i]);
+                    for (int j = 0; j < hidden1_size; ++j) {
+                        double delta = err * a1[j];
+                        int idx = i * hidden1_size + j;
+                        w2[i][j] += learning_rate * delta + momentum * delta2_prev[idx];
+                        delta2_prev[idx] = learning_rate * delta;
+                    }
+                }
+
+                // update w1
+                for (int i = 0; i < hidden1_size; ++i) {
+                    double sum_err = 0.0;
+                    for (int k = 0; k < hidden2_size; ++k)
+                        sum_err += error * w3[k] * tanh_derivative(a2[k]) * w2[k][i];
+                    double err = sum_err * tanh_derivative(a1[i]);
+                    for (int j = 0; j < INPUT_SIZE; ++j) {
+                        int idx = i * INPUT_SIZE + j;
+                        double delta = err * input[j];
+                        w1[i][j] += learning_rate * delta + momentum * delta1_prev[idx];
+                        delta1_prev[idx] = learning_rate * delta;
+                    }
+                }
+            }
+            if (epoch % 10 == 0)
+                cout << "Epoch " << epoch << "/" << EPOCHS << ", Error = " << total_error << endl;
+        }
+    }
+
+    double predict(const vector<double> &input_raw, double min_val, double max_val) {
+        vector<double> input(INPUT_SIZE);
+        for (int i = 0; i < INPUT_SIZE; ++i)
+            input[i] = normalize(input_raw[i], min_val, max_val);
+        double output = forward(input);
+        return denormalize(output, min_val, max_val);
+    }
 };
 
 int main() {
-    vector<DataRow> parsed_data;
-    ifstream file("Flood_data.txt");
-    string line;
-    double MIN_VAL, MAX_VAL;
+    int hidden1 = 16;
+    int hidden2 = 12;
+    double lr = 0.01;
+    double momentum = 0.9;
 
-    if (!file.is_open()) {
-        cerr << "Error: Flood_data.txt not found." << endl;
+    double min_val, max_val;
+    auto data = load_dataset("Flood_data.txt", min_val, max_val);
+    if (data.empty()) {
+        cerr << "Error: Failed to load data." << endl;
         return 1;
     }
 
-    getline(file, line); // Skip line 1
-    getline(file, line); // Skip line 2
-    int line_num = 3;
-    while (getline(file, line)) {
-        stringstream ss(line);
-        vector<double> values;
-        string cell;
-        while (getline(ss, cell, '\t')) {
-            if (!cell.empty()) values.push_back(stod(cell));
-        }
-        if (values.size() == 9) {
-            parsed_data.push_back({vector<double>(values.begin(), values.begin()+8), {values[8]}});
-        } else {
-            cout << "line " << line_num << ": skip" << endl;
-        }
-        line_num++;
-    }
-    file.close();
+    NeuralNetwork net(hidden1, hidden2, lr, momentum);
+    net.train(data, min_val, max_val);
 
-    if (parsed_data.empty()) {
-        cerr << "No valid data found." << endl;
-        return 1;
-    }
+    vector<double> sample = {95, 95, 95, 95, 148, 149, 150, 150};
+    double pred = net.predict(sample, min_val, max_val);
 
-    vector<double> all_values;
-    for (const auto& row : parsed_data) {
-        all_values.insert(all_values.end(), row.inputs.begin(), row.inputs.end());
-        all_values.insert(all_values.end(), row.targets.begin(), row.targets.end());
-    }
-    if (all_values.empty()) return 1;
-
-    auto [min_it, max_it] = minmax_element(all_values.begin(), all_values.end());
-    MIN_VAL = *min_it;
-    MAX_VAL = *max_it;
-    if (MIN_VAL == MAX_VAL) MAX_VAL += 1e-6;
-
-    vector<DataRow> normalized_data;
-    for (const auto& row : parsed_data) {
-        vector<double> norm_inputs, norm_targets;
-        for (double v : row.inputs) norm_inputs.push_back(normalize(v, MIN_VAL, MAX_VAL));
-        for (double v : row.targets) norm_targets.push_back(normalize(v, MIN_VAL, MAX_VAL));
-        normalized_data.push_back({norm_inputs, norm_targets});
-    }
-
-    shuffle(normalized_data.begin(), normalized_data.end(), mt19937(random_device()()));
-
-    int input_nodes = 8, hidden1_nodes = 10, hidden2_nodes = 10, output_nodes = 1;
-    double learning_rate = 0.08;
-    int epochs = 100;
-
-    NeuralNetwork nn(input_nodes, hidden1_nodes, hidden2_nodes, output_nodes, learning_rate);
-
-    for (int i = 0; i < epochs; ++i) {
-        for (const auto& row : normalized_data)
-            nn.train(row.inputs, row.targets);
-    }
-
-    if (!parsed_data.empty()) {
-        vector<double> test_input_norm;
-        for (double v : parsed_data[0].inputs)
-            test_input_norm.push_back(normalize(v, MIN_VAL, MAX_VAL));
-
-        vector<double> result = nn.feedforward(test_input_norm);
-        double predicted_raw = denormalize(result[0], MIN_VAL, MAX_VAL);
-
-        cout << "\n--- Prediction Test ---" << endl;
-        cout << "Predicted H(t+7): " << predicted_raw << endl;
-    }
-
+    cout << "\nSample Prediction Result:\nInput: ";
+    for (double v : sample) cout << v << " ";
+    cout << "\nPredicted Value: " << pred << endl;
     return 0;
 }

@@ -1,4 +1,4 @@
-// โปรแกรมนี้สร้างและฝึกสอนโครงข่ายประสาทเทียมแบบง่ายสำหรับทำนายค่าระดับน้ำท่วม //
+// โปรแกรมนี้สร้างและฝึกสอนโครงข่ายประสาทเทียมแบบ 2 hidden layers สำหรับทำนายค่าระดับน้ำท่วม //
 // พร้อมทำ cross-validation เพื่อตรวจสอบความแม่นยำ
 
 #include <iostream>      // สำหรับแสดงผลลัพธ์ทางหน้าจอ
@@ -15,9 +15,10 @@ using namespace std;
 
 // กำหนดค่าคงที่สำหรับโครงข่ายประสาทเทียม
 const int INPUT_SIZE = 8;               // จำนวน input features
-const int HIDDEN_SIZE = 16;             // จำนวนโหนดใน hidden layer
-const double LEARNING_RATE = 0.01;      // อัตราการเรียนรู้
-const double MOMENTUM = 0.9;            // ค่าความเฉื่อยของการอัปเดตน้ำหนัก
+int HIDDEN1_SIZE = 16;                  // จำนวนโหนดใน hidden layer ชั้นที่ 1 (ปรับได้)
+int HIDDEN2_SIZE = 8;                   // จำนวนโหนดใน hidden layer ชั้นที่ 2 (ปรับได้)
+double LEARNING_RATE = 0.01;            // อัตราการเรียนรู้ (ปรับได้)
+double MOMENTUM = 0.9;                  // ค่าความเฉื่อยของการอัปเดตน้ำหนัก (ปรับได้)
 const int EPOCHS = 300;                 // จำนวนรอบการฝึก
 const double TARGET_MARGIN = 10.0;      // ค่าความคลาดเคลื่อนที่ยอมรับได้ (±10)
 
@@ -87,13 +88,16 @@ vector<DataPoint> load_dataset(const string &filename, double &min_val, double &
     return dataset;
 }
 
-// โครงสร้างโครงข่ายประสาทเทียม 1 ชั้นซ่อน
+// โครงสร้างโครงข่ายประสาทเทียม 2 ชั้นซ่อน
 struct NeuralNetwork {
-    vector<vector<double>> weights_input_hidden;       // น้ำหนักจาก input → hidden
-    vector<double> weights_hidden_output;              // น้ำหนักจาก hidden → output
-    vector<double> hidden_output;                      // เก็บค่าผลลัพธ์ของ hidden layer
-    vector<double> input_hidden_delta_prev;            // สำหรับ momentum ของ input → hidden
-    vector<double> hidden_output_delta_prev;           // สำหรับ momentum ของ hidden → output
+    vector<vector<double>> weights_input_hidden1;       // น้ำหนักจาก input → hidden1
+    vector<vector<double>> weights_hidden1_hidden2;     // น้ำหนักจาก hidden1 → hidden2
+    vector<double> weights_hidden2_output;              // น้ำหนักจาก hidden2 → output
+    vector<double> hidden1_output;                      // เก็บค่าผลลัพธ์ของ hidden layer 1
+    vector<double> hidden2_output;                      // เก็บค่าผลลัพธ์ของ hidden layer 2
+    vector<double> input_hidden1_delta_prev;            // สำหรับ momentum ของ input → hidden1
+    vector<double> hidden1_hidden2_delta_prev;          // สำหรับ momentum ของ hidden1 → hidden2
+    vector<double> hidden2_output_delta_prev;           // สำหรับ momentum ของ hidden2 → output
 
     NeuralNetwork() {
         // สุ่มค่าเริ่มต้นให้น้ำหนักทุกเส้นทาง
@@ -101,32 +105,55 @@ struct NeuralNetwork {
         mt19937 gen(rd());
         uniform_real_distribution<> dis(-0.5, 0.5);
 
-        weights_input_hidden = vector<vector<double>>(HIDDEN_SIZE, vector<double>(INPUT_SIZE));
-        for (auto &row : weights_input_hidden)
+        // กำหนดขนาดและสุ่มค่าน้ำหนัก input → hidden1
+        weights_input_hidden1 = vector<vector<double>>(HIDDEN1_SIZE, vector<double>(INPUT_SIZE));
+        for (auto &row : weights_input_hidden1)
             for (double &w : row)
                 w = dis(gen);
 
-        weights_hidden_output = vector<double>(HIDDEN_SIZE);
-        for (double &w : weights_hidden_output)
+        // กำหนดขนาดและสุ่มค่าน้ำหนัก hidden1 → hidden2
+        weights_hidden1_hidden2 = vector<vector<double>>(HIDDEN2_SIZE, vector<double>(HIDDEN1_SIZE));
+        for (auto &row : weights_hidden1_hidden2)
+            for (double &w : row)
+                w = dis(gen);
+
+        // กำหนดขนาดและสุ่มค่าน้ำหนัก hidden2 → output
+        weights_hidden2_output = vector<double>(HIDDEN2_SIZE);
+        for (double &w : weights_hidden2_output)
             w = dis(gen);
 
-        hidden_output = vector<double>(HIDDEN_SIZE);
-        input_hidden_delta_prev = vector<double>(HIDDEN_SIZE * INPUT_SIZE, 0.0);
-        hidden_output_delta_prev = vector<double>(HIDDEN_SIZE, 0.0);
+        // กำหนดขนาด output arrays
+        hidden1_output = vector<double>(HIDDEN1_SIZE);
+        hidden2_output = vector<double>(HIDDEN2_SIZE);
+        
+        // กำหนดขนาด momentum arrays
+        input_hidden1_delta_prev = vector<double>(HIDDEN1_SIZE * INPUT_SIZE, 0.0);
+        hidden1_hidden2_delta_prev = vector<double>(HIDDEN2_SIZE * HIDDEN1_SIZE, 0.0);
+        hidden2_output_delta_prev = vector<double>(HIDDEN2_SIZE, 0.0);
     }
 
     // ฟังก์ชัน forward คำนวณ output ของโครงข่าย
     double forward(const vector<double> &input) {
-        for (int i = 0; i < HIDDEN_SIZE; ++i) {
+        // คำนวณ hidden layer 1
+        for (int i = 0; i < HIDDEN1_SIZE; ++i) {
             double sum = 0.0;
             for (int j = 0; j < INPUT_SIZE; ++j)
-                sum += weights_input_hidden[i][j] * input[j];
-            hidden_output[i] = tanh_act(sum);
+                sum += weights_input_hidden1[i][j] * input[j];
+            hidden1_output[i] = tanh_act(sum);
         }
 
+        // คำนวณ hidden layer 2
+        for (int i = 0; i < HIDDEN2_SIZE; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < HIDDEN1_SIZE; ++j)
+                sum += weights_hidden1_hidden2[i][j] * hidden1_output[j];
+            hidden2_output[i] = tanh_act(sum);
+        }
+
+        // คำนวณ output layer
         double output = 0.0;
-        for (int i = 0; i < HIDDEN_SIZE; ++i)
-            output += weights_hidden_output[i] * hidden_output[i];
+        for (int i = 0; i < HIDDEN2_SIZE; ++i)
+            output += weights_hidden2_output[i] * hidden2_output[i];
 
         return output;
     }
@@ -147,20 +174,35 @@ struct NeuralNetwork {
                 double error = target - output;
                 total_error += error * error;
 
-                // อัปเดตน้ำหนักจาก hidden → output
-                for (int i = 0; i < HIDDEN_SIZE; ++i) {
-                    double delta_output = error * hidden_output[i];
-                    weights_hidden_output[i] += LEARNING_RATE * delta_output + MOMENTUM * hidden_output_delta_prev[i];
-                    hidden_output_delta_prev[i] = LEARNING_RATE * delta_output;
+                // อัปเดตน้ำหนักจาก hidden2 → output
+                for (int i = 0; i < HIDDEN2_SIZE; ++i) {
+                    double delta_output = error * hidden2_output[i];
+                    weights_hidden2_output[i] += LEARNING_RATE * delta_output + MOMENTUM * hidden2_output_delta_prev[i];
+                    hidden2_output_delta_prev[i] = LEARNING_RATE * delta_output;
                 }
 
-                // อัปเดตน้ำหนักจาก input → hidden
-                for (int i = 0; i < HIDDEN_SIZE; ++i) {
-                    double error_hidden = error * weights_hidden_output[i] * tanh_derivative(hidden_output[i]);
+                // อัปเดตน้ำหนักจาก hidden1 → hidden2
+                for (int i = 0; i < HIDDEN2_SIZE; ++i) {
+                    double error_hidden2 = error * weights_hidden2_output[i] * tanh_derivative(hidden2_output[i]);
+                    for (int j = 0; j < HIDDEN1_SIZE; ++j) {
+                        double delta = error_hidden2 * hidden1_output[j];
+                        weights_hidden1_hidden2[i][j] += LEARNING_RATE * delta + MOMENTUM * hidden1_hidden2_delta_prev[i * HIDDEN1_SIZE + j];
+                        hidden1_hidden2_delta_prev[i * HIDDEN1_SIZE + j] = LEARNING_RATE * delta;
+                    }
+                }
+
+                // อัปเดตน้ำหนักจาก input → hidden1
+                for (int i = 0; i < HIDDEN1_SIZE; ++i) {
+                    double error_hidden1 = 0.0;
+                    for (int k = 0; k < HIDDEN2_SIZE; ++k) {
+                        error_hidden1 += error * weights_hidden2_output[k] * tanh_derivative(hidden2_output[k]) * weights_hidden1_hidden2[k][i];
+                    }
+                    error_hidden1 *= tanh_derivative(hidden1_output[i]);
+                    
                     for (int j = 0; j < INPUT_SIZE; ++j) {
-                        double delta = error_hidden * input[j];
-                        weights_input_hidden[i][j] += LEARNING_RATE * delta + MOMENTUM * input_hidden_delta_prev[i * INPUT_SIZE + j];
-                        input_hidden_delta_prev[i * INPUT_SIZE + j] = LEARNING_RATE * delta;
+                        double delta = error_hidden1 * input[j];
+                        weights_input_hidden1[i][j] += LEARNING_RATE * delta + MOMENTUM * input_hidden1_delta_prev[i * INPUT_SIZE + j];
+                        input_hidden1_delta_prev[i * INPUT_SIZE + j] = LEARNING_RATE * delta;
                     }
                 }
             }
@@ -203,7 +245,7 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
                 train_set.push_back(dataset[i]);
         }
 
-        NeuralNetwork net;
+        NeuralNetwork net; // สร้างโครงข่ายใหม่ทุกครั้ง (random weights)
         net.train(train_set, min_val, max_val);
 
         int correct = 0, under = 0, over = 0;
@@ -275,6 +317,7 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
          << setw(20) << "100%" << "|" << endl;
 }
 
+// ฟังก์ชันทดลองกับข้อมูล cross.txt
 void evaluate_cross_file(const string &filename) {
     ifstream file(filename);
     if (!file.is_open()) {
@@ -355,18 +398,80 @@ void evaluate_cross_file(const string &filename) {
          << "| " << endl;
 }
 
+// ฟังก์ชันสำหรับทดลองค่าพารามิเตอร์ต่างๆ
+/*void experiment_parameters() {
+    cout << "\n=== ทดลองกับพารามิเตอร์ต่างๆ ===\n";
+    
+    // เก็บค่าเดิมไว้
+    int orig_hidden1 = HIDDEN1_SIZE;
+    int orig_hidden2 = HIDDEN2_SIZE;
+    double orig_lr = LEARNING_RATE;
+    double orig_momentum = MOMENTUM;
+    
+    double min_val, max_val;
+    vector<DataPoint> data = load_dataset("Flood_data.txt", min_val, max_val);
+    
+    if (data.empty()) {
+        cerr << "Error: No data loaded for experiments." << endl;
+        return;
+    }
+    
+    // ทดลองที่ 1: เปลี่ยนจำนวน hidden nodes
+    cout << "\n--- ทดลองที่ 1: เปลี่ยนจำนวน hidden nodes ---\n";
+    vector<pair<int,int>> hidden_configs = {{8, 4}, {16, 8}, {32, 16}};
+    
+    for (auto config : hidden_configs) {
+        HIDDEN1_SIZE = config.first;
+        HIDDEN2_SIZE = config.second;
+        cout << "\nHidden1: " << HIDDEN1_SIZE << ", Hidden2: " << HIDDEN2_SIZE << endl;
+        cross_validate(data, min_val, max_val, 10);
+    }
+    
+    // กลับค่าเดิม
+    HIDDEN1_SIZE = orig_hidden1;
+    HIDDEN2_SIZE = orig_hidden2;
+    
+    // ทดลองที่ 2: เปลี่ยน learning rate
+    cout << "\n--- ทดลองที่ 2: เปลี่ยน learning rate ---\n";
+    vector<double> learning_rates = {0.005, 0.01, 0.02, 0.05};
+    
+    for (double lr : learning_rates) {
+        LEARNING_RATE = lr;
+        cout << "\nLearning Rate: " << LEARNING_RATE << endl;
+        cross_validate(data, min_val, max_val, 10);
+    }
+    
+    // กลับค่าเดิม
+    LEARNING_RATE = orig_lr;
+    
+    // ทดลองที่ 3: เปลี่ยน momentum
+    cout << "\n--- ทดลองที่ 3: เปลี่ยน momentum ---\n";
+    vector<double> momentums = {0.5, 0.7, 0.9, 0.95};
+    
+    for (double mom : momentums) {
+        MOMENTUM = mom;
+        cout << "\nMomentum: " << MOMENTUM << endl;
+        cross_validate(data, min_val, max_val, 10);
+    }
+    
+    // กลับค่าเดิม
+    MOMENTUM = orig_momentum;
+}*/
+
 int main() {
     double min_val, max_val;
     vector<DataPoint> data = load_dataset("Flood_data.txt", min_val, max_val);  // โหลดข้อมูลและ normalize
 
     cout << "Min: " << min_val << ", Max: " << max_val << endl;
+    cout << "Hidden Layer 1 Nodes: " << HIDDEN1_SIZE << ", Hidden Layer 2 Nodes: " << HIDDEN2_SIZE << endl;
+    cout << "Learning Rate: " << LEARNING_RATE << ", Momentum: " << MOMENTUM << endl;
 
     if (data.empty()) {
         cerr << "Error: No valid data loaded from file." << endl;  // ถ้าโหลดไม่ได้ให้แจ้งเตือน
         return 1;
     }
 
-    NeuralNetwork model;
+    NeuralNetwork model; // สร้างโครงข่ายใหม่ (random weights)
     model.train(data, min_val, max_val);  // ฝึกโมเดลกับข้อมูลทั้งหมด
 
     // ทดสอบการทำนายด้วยตัวอย่าง
@@ -382,7 +487,11 @@ int main() {
     cout << "\n";
     cross_validate(data, min_val, max_val);
 
+    // ทดลองกับข้อมูล cross.txt
     evaluate_cross_file("cross.txt");
+    
+    // ทดลองกับพารามิเตอร์ต่างๆ
+    //experiment_parameters();
+    
     return 0;
-
 }
