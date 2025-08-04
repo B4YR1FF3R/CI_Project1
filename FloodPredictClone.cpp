@@ -286,9 +286,9 @@ void cross_validate(vector<DataPoint> dataset, double min_val, double max_val, i
 
     cout << "\n                                  --- Confusion Matrix ---\n";
     cout << left
-         << setw(26) << " " << "|"
+         << setw(26) << "Category" << "|"
          << setw(20) << "  Count" << "|"
-         << setw(20) << "  % of all Samples" << "|"
+         << setw(20) << "  % of Samples" << "|"
          << "  Interpretation\n";
     cout << string(90, '-') << "\n";
 
@@ -362,40 +362,33 @@ void evaluate_cross_file(const string &filename) {
     // สร้างตารางให้ตรงทุกช่อง
     cout << "\n                              --- Confusion Matrix (from cross.txt) ---\n";
     cout << left
-         << setw(26) << "Category"
-         << "| " << setw(19) << "Count"
-         << "| " << setw(20) << "% of Samples"
-         << "| " << "Interpretation" << endl;
+         << setw(26) << "Category" << "|"
+         << setw(20) << "  Count" << "|"
+         << setw(20) << "  % of Samples" << "|"
+         << "  Interpretation\n";
 
-    cout << string(26, '-')
-         << string(21, '-')
-         << string(22, '-')
-         << string(70, '-') << endl;
+    cout << string(90, '-') << "\n";
 
-    cout << setw(26) << "Correct within margin"
-         << "| " << setw(19) << correct
-         << "| " << setw(20) << fixed << setprecision(2) << pc_correct
-         << "| " << "The value is within acceptable limits." << endl;
+    cout << setw(26) << " Correct within margin" << "|"
+         << setw(20) << correct << "|"
+         << setw(19) << fixed << setprecision(2) << pc_correct << "%" << "|"
+         << "  The value is within acceptable limits.\n";
 
-    cout << setw(26) << "Under predictions"
-         << "| " << setw(19) << under
-         << "| " << setw(20) << fixed << setprecision(2) << pc_under
-         << "| " << "The value is lower than actual class." << endl;
+    cout << setw(26) << " Under predictions" << "|"
+         << setw(20) << under << "|"
+         << setw(19) << fixed << setprecision(2) << pc_under << "%" << "|"
+         << "  The value is lower than actual value.\n";
 
-    cout << setw(26) << "Over predictions"
-         << "| " << setw(19) << over
-         << "| " << setw(20) << fixed << setprecision(2) << pc_over
-         << "| " << "The value is higher than actual class." << endl;
+    cout << setw(26) << " Over predictions"<< "|"
+         << setw(20) << over << "|"
+         << setw(19) << fixed << setprecision(2) << pc_over << "%" << "|"
+         << "  The value is higher than actual value.\n";
 
-    cout << string(26, '-')
-         << string(21, '-')
-         << string(22, '-')
-         << string(70, '-') << endl;
+    cout << string(70, '-') << endl;
 
-    cout << setw(26) << "Total Test Samples"
-         << "| " << setw(19) << total
-         << "| " << setw(20) << "100.00"
-         << "| " << endl;
+    cout << setw(26) << " Total Test Samples" << "|"
+         << setw(20) << total << "|"
+         << setw(20) << "100%" << "| " << endl;
 }
 
 // ฟังก์ชันสำหรับทดลองค่าพารามิเตอร์ต่างๆ
